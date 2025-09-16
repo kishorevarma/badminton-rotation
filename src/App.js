@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 
 export default function App() {
+  const [mode, setMode] = useState("1court");
   const [input, setInput] = useState("");
   const [numMatches, setNumMatches] = useState(7);
   const [names, setNames] = useState([]);
@@ -17,55 +18,89 @@ export default function App() {
   function generate() {
     setError(null);
     const parsed = parseInputToNames(input);
-    if (parsed.length !== 7) {
-      setError("Please enter exactly 7 names.");
+    const expected = mode === "1court" ? 7 : 9;
+    if (parsed.length !== expected) {
+      setError(`Please enter exactly ${expected} names.`);
       return;
     }
     setNames(parsed);
 
     const sched = [];
-    const sitting = Array(7).fill(false);
-    let order = [...parsed];
-
-    for (let m = 0; m < numMatches; m++) {
-      // pick 4 players who didn't sit last match
-      let playing = [];
-      for (let i = 0; i < 7; i++) {
-        if (!sitting[i] && playing.length < 4) playing.push(order[i]);
+    if (mode === "1court") {
+      const sitting = Array(7).fill(false);
+      let order = [...parsed];
+      for (let m = 0; m < numMatches; m++) {
+        let playing = [];
+        for (let i = 0; i < 7; i++)
+          if (!sitting[i] && playing.length < 4) playing.push(order[i]);
+        if (playing.length < 4)
+          for (let i = 0; i < 7; i++)
+            if (!playing.includes(order[i])) {
+              playing.push(order[i]);
+              if (playing.length === 4) break;
+            }
+        const team1 = [playing[0], playing[1]];
+        const team2 = [playing[2], playing[3]];
+        const sitPlayers = order.filter((p) => !playing.includes(p));
+        sched.push({ match: m + 1, team1, team2, sit: sitPlayers });
+        sitting.fill(false);
+        sitPlayers.forEach((p) => {
+          sitting[order.indexOf(p)] = true;
+        });
+        order.push(order.shift());
       }
-      // if less than 4 (first match), fill from sitting
-      if (playing.length < 4) {
-        for (let i = 0; i < 7; i++) {
-          if (!playing.includes(order[i])) playing.push(order[i]);
-          if (playing.length === 4) break;
-        }
+    } else {
+      // 2 courts, 9 players
+      let order = [...parsed];
+      let lastSitting = null;
+      for (let m = 0; m < numMatches; m++) {
+        const sitCandidates = order.filter((p) => p !== lastSitting);
+        const sitPlayer = sitCandidates[0];
+        lastSitting = sitPlayer;
+        const playing = order.filter((p) => p !== sitPlayer);
+        const court1 = {
+          team1: [playing[0], playing[1]],
+          team2: [playing[2], playing[3]],
+        };
+        const court2 = {
+          team1: [playing[4], playing[5]],
+          team2: [playing[6], playing[7]],
+        };
+        sched.push({ match: m + 1, courts: [court1, court2], sit: sitPlayer });
+        order.push(order.shift());
       }
-      // assign teams
-      const team1 = [playing[0], playing[1]];
-      const team2 = [playing[2], playing[3]];
-      const sitPlayers = order.filter((p) => !playing.includes(p));
-      sched.push({ team1, team2, sit: sitPlayers });
-      // update sitting for next match
-      sitting.fill(false);
-      sitPlayers.forEach((p) => {
-        sitting[order.indexOf(p)] = true;
-      });
-      // rotate order for next match to vary teams
-      order.push(order.shift());
     }
+
     setSchedule(sched);
   }
 
   function printableText() {
     if (!schedule) return "";
-    return schedule
-      .map(
-        (match, i) =>
-          `Match ${i + 1}: Team1 — ${match.team1.join(
-            ", "
-          )}, Team2 — ${match.team2.join(", ")}, Sit — ${match.sit.join(", ")}`
-      )
-      .join("\n");
+    if (mode === "1court") {
+      return schedule
+        .map(
+          (s) =>
+            `Match ${s.match}: Team1 — ${s.team1.join(
+              ", "
+            )}, Team2 — ${s.team2.join(", ")}, Sit — ${s.sit.join(", ")}`
+        )
+        .join("\n");
+    } else {
+      return schedule
+        .map(
+          (s) =>
+            `Match ${s.match} | Sit — ${
+              s.sit
+            }\nCourt 1: Team1 — ${s.courts[0].team1.join(
+              ", "
+            )}, Team2 — ${s.courts[0].team2.join(
+              ", "
+            )}\nCourt 2: Team1 — ${s.courts[1].team1.join(
+              ", "
+            )}, Team2 — ${s.courts[1].team2.join(", ")}`
+        )
+        .join("\n\n");
+    }
   }
 
   function copyPrintable() {
@@ -77,21 +112,49 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 flex items-start justify-center">
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-md p-6">
+      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-md p-6">
         <h1 className="text-2xl font-semibold mb-2">
-          Badminton 7-player Teams
+          Badminton Team Scheduler
         </h1>
         <p className="text-sm text-gray-600 mb-4">
-          Enter exactly 7 names (comma or newline separated). Generates teams
-          for each match.
+          Generate team schedules for either 1 court (7 players) or 2 courts (9
+          players).
         </p>
+
+        <div className="mb-3">
+          <label className="mr-4">
+            <input
+              type="radio"
+              checked={mode === "1court"}
+              onChange={() => {
+                setMode("1court");
+                setSchedule(null);
+                setInput("");
+              }}
+            />{" "}
+            1 Court, 7 Players
+          </label>
+          <label>
+            <input
+              type="radio"
+              checked={mode === "2courts"}
+              onChange={() => {
+                setMode("2courts");
+                setSchedule(null);
+                setInput("");
+              }}
+            />{" "}
+            2 Courts, 9 Players
+          </label>
+        </div>
 
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="One per line or comma separated"
+          placeholder={mode === "1court" ? "Enter 7 names" : "Enter 9 names"}
           className="w-full border rounded-lg p-3 mb-3 text-sm h-28 resize-none"
         />
+
         <div className="flex gap-2 mb-3">
           <label className="text-sm">Number of Matches:</label>
           <input
@@ -111,8 +174,8 @@ export default function App() {
           Generate Schedule
         </button>
 
-        {schedule && (
-          <table className="w-full border-collapse border border-gray-300">
+        {schedule && mode === "1court" && (
+          <table className="w-full border-collapse border border-gray-300 mb-4">
             <thead>
               <tr className="bg-gray-200">
                 <th className="border border-gray-300 p-2">Match</th>
@@ -122,21 +185,62 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {schedule.map((match, i) => (
-                <tr key={i} className="hover:bg-gray-50">
+              {schedule.map((s) => (
+                <tr key={s.match} className="hover:bg-gray-50">
                   <td className="border border-gray-300 p-2 text-center font-medium">
-                    {i + 1}
+                    {s.match}
                   </td>
                   <td className="border border-gray-300 p-2">
-                    {match.team1.join(", ")}
+                    {s.team1?.join(", ")}
                   </td>
                   <td className="border border-gray-300 p-2">
-                    {match.team2.join(", ")}
+                    {s.team2?.join(", ")}
                   </td>
                   <td className="border border-gray-300 p-2">
-                    {match.sit.join(", ")}
+                    {s.sit?.join(", ")}
                   </td>
                 </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {schedule && mode === "2courts" && (
+          <table className="w-full border-collapse border border-gray-300 mb-4">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border border-gray-300 p-2">Match</th>
+                <th className="border border-gray-300 p-2">Court</th>
+                <th className="border border-gray-300 p-2">Team 1</th>
+                <th className="border border-gray-300 p-2">Team 2</th>
+                <th className="border border-gray-300 p-2">Sitting</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((s) => (
+                <React.Fragment key={s.match}>
+                  {s.courts.map((c, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="border border-gray-300 p-2 text-center font-medium">
+                        {s.match}
+                      </td>
+                      <td className="border border-gray-300 p-2 text-center">
+                        {idx + 1}
+                      </td>
+                      <td className="border border-gray-300 p-2">
+                        {c.team1.join(", ")}
+                      </td>
+                      <td className="border border-gray-300 p-2">
+                        {c.team2.join(", ")}
+                      </td>
+                      {idx === 0 && (
+                        <td className="border border-gray-300 p-2" rowSpan={2}>
+                          {s.sit}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
