@@ -27,26 +27,26 @@ export default function App() {
 
     const sched = [];
     if (mode === "1court") {
-      const sitting = Array(7).fill(false);
       let order = [...parsed];
+      let lastSitting = [];
+
       for (let m = 0; m < numMatches; m++) {
-        let playing = [];
-        for (let i = 0; i < 7; i++)
-          if (!sitting[i] && playing.length < 4) playing.push(order[i]);
-        if (playing.length < 4)
-          for (let i = 0; i < 7; i++)
-            if (!playing.includes(order[i])) {
-              playing.push(order[i]);
-              if (playing.length === 4) break;
-            }
-        const team1 = [playing[0], playing[1]];
-        const team2 = [playing[2], playing[3]];
-        const sitPlayers = order.filter((p) => !playing.includes(p));
+        // pick 3 sitting players who didn't sit last match
+        let sitPlayers = order
+          .filter((p) => !lastSitting.includes(p))
+          .slice(0, 3);
+
+        // rest play
+        let playing = order.filter((p) => !sitPlayers.includes(p));
+        let team1 = [playing[0], playing[1]];
+        let team2 = [playing[2], playing[3]];
+
         sched.push({ match: m + 1, team1, team2, sit: sitPlayers });
-        sitting.fill(false);
-        sitPlayers.forEach((p) => {
-          sitting[order.indexOf(p)] = true;
-        });
+
+        // update last sitting players
+        lastSitting = sitPlayers;
+
+        // rotate order for next match to vary teams
         order.push(order.shift());
       }
     } else {
